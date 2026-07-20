@@ -2,7 +2,7 @@
 
 ## Recommended boundary
 
-The current demonstration keeps classification and repair in one bounded Claude session so it can prove a test defect before editing. The repair gate requires `TEST_DEFECT`, confidence of at least 0.90, and focused plus smoke-suite verification. The failed run remains red; if Claude pushes a correction to the open PR branch, that commit starts a fresh CI run.
+The current demonstration keeps classification and repair in one bounded Claude session so it can prove a test defect before editing. The repair gate requires `TEST_DEFECT`, confidence of at least 0.90, and focused plus smoke-suite verification. A deterministic publishing step compares the declared and actual diff, enforces an allowed-path list, reruns TypeScript and the smoke suite, and only then commits to the open PR branch. That commit starts a fresh CI run while the original run remains red.
 
 For a hardened production design, classification and repair should be separate jobs. A repair job should consume the structured triage artifact only after a human or protected GitHub environment approves the attempt.
 

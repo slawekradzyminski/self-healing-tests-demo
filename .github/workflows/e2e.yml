@@ -23,6 +23,9 @@ jobs:
     steps:
       - name: Check out tests
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -116,6 +119,56 @@ jobs:
           confidence="$(jq -r '.confidence' triage-result.json)"
           fix_applied="$(jq -r '.fix_applied' triage-result.json)"
           printf 'Claude triage: %s (confidence %s; fix applied: %s)\n' "$classification" "$confidence" "$fix_applied" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish verified test repair to the PR branch
+        if: >-
+          steps.triage.outcome == 'success' &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          TRIAGE_OUTPUT: ${{ steps.triage.outputs.structured_output }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          should_publish="$(jq -r '
+            .classification == "TEST_DEFECT" and
+            .confidence >= 0.90 and
+            .fix_applied == true and
+            .affected_repository == "${{ github.repository }}"
+          ' <<< "$TRIAGE_OUTPUT")"
+
+          if [[ "$should_publish" != "true" ]]; then
+            echo "Claude result did not satisfy the repair gate."
+            exit 0
+          fi
+
+          git diff --check
+          git diff --name-only | sort -u > /tmp/actual-changed-files
+          jq -r '.changed_files[]' <<< "$TRIAGE_OUTPUT" | sort -u > /tmp/reported-changed-files
+          diff -u /tmp/reported-changed-files /tmp/actual-changed-files
+          test -s /tmp/actual-changed-files
+
+          while IFS= read -r changed_file; do
+            case "$changed_file" in
+              tests/*.ts|pages/*.ts|fixtures/*.ts|components/*.ts|config/*.ts)
+                ;;
+              *)
+                echo "Repair touched a disallowed path: $changed_file" >&2
+                exit 1
+                ;;
+            esac
+          done < /tmp/actual-changed-files
+
+          npm run typecheck
+          npm run test:e2e
+
+          git config user.name "claude[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --pathspec-from-file=/tmp/actual-changed-files
+          git commit -m "Fix E2E test defect diagnosed by Claude"
+          git push origin "HEAD:$HEAD_BRANCH"
 
       - name: Upload Claude triage
         if: steps.triage.outcome == 'success'
