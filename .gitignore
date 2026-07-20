@@ -19,6 +19,8 @@ artifacts
 .env
 .triage-sources/
 triage-result.json
+test-output.log
+repair.patch
 
 # Python
 __pycache__/
