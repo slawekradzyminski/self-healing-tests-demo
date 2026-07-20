@@ -104,7 +104,7 @@ jobs:
             edit anything. Do not modify workflow or triage-policy files.
             Return INCONCLUSIVE when evidence cannot support another class.
           claude_args: >-
-            --max-turns 20
+            --max-turns 40
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(gh:*),Bash(git:*),Bash(ls:*),Bash(find:*)"
             --json-schema '{"type":"object","additionalProperties":false,"properties":{"classification":{"type":"string","enum":["PRODUCT_BUG","TEST_DEFECT","CI_ENVIRONMENT","INCONCLUSIVE"]},"confidence":{"type":"number","minimum":0,"maximum":1},"summary":{"type":"string"},"evidence":{"type":"array","items":{"type":"string"},"minItems":1},"reproduction":{"type":"string"},"recommended_action":{"type":"string"},"affected_repository":{"type":"string"},"proposed_change":{"type":"string"},"fix_applied":{"type":"boolean"},"changed_files":{"type":"array","items":{"type":"string"}},"verification":{"type":"array","items":{"type":"string"}}},"required":["classification","confidence","summary","evidence","reproduction","recommended_action","affected_repository","proposed_change","fix_applied","changed_files","verification"]}'
 
