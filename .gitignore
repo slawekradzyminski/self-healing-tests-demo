@@ -19,6 +19,7 @@ artifacts
 .env
 .triage-sources/
 triage-result.json
+claude-run.json
 test-output.log
 repair.patch
 

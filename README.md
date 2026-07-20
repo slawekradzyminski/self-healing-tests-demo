@@ -105,6 +105,8 @@ Automated changes are limited to high-confidence `TEST_DEFECT` results in this r
 
 Claude runs with automatic approval and unrestricted local tools, but its job has only `contents: read`. A separate job receives the patch artifact and checks the classification, confidence, affected repository, reported file list, allowed paths, TypeScript, and smoke suite before it can push. On a PR failure it pushes only to that same-repository PR branch; on a trusted `main` failure it opens a new draft repair PR. No code path invokes merge.
 
+The workflow invokes the pinned Claude Code CLI directly in non-interactive mode so failure triage works for both `push` and `pull_request` events. It caps each run at 35 agentic turns and USD 2, and stores turn, duration, usage, and cost metadata with the structured diagnosis. The official GitHub action is intentionally not the execution wrapper here because its current runtime rejects a `push` event before Claude starts.
+
 GitHub does not offer a create-PR-but-never-merge permission: both operations use `pull-requests: write`. The write token is therefore exposed only to the deterministic delivery module, never to Claude or candidate test commands. Protect `main` with repository rules that require pull requests and human review.
 
 Prompt construction, the structured-output schema, repair policy, artifact bundling, and publishing logic live in the dependency-free [`automation`](automation/) Python project. Run its tests with:

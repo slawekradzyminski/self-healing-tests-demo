@@ -72,35 +72,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: ./scripts/clone-triage-sources.sh
 
-      - name: Prepare Claude configuration
-        id: claude_config
+      - name: Install Claude Code CLI
+        id: claude_install
         if: >-
           steps.e2e.outcome == 'failure' &&
           (github.event_name != 'pull_request' ||
           github.event.pull_request.head.repo.full_name == github.repository)
         env:
           PYTHONPATH: automation
-        run: >-
-          python3 -m self_healing.prepare
-          --github-output "$GITHUB_OUTPUT"
+        shell: bash
+        run: |
+          version="$(python3 -c 'from self_healing.config import CLAUDE_CODE_VERSION; print(CLAUDE_CODE_VERSION)')"
+          npm install --global "@anthropic-ai/claude-code@$version"
 
       - name: Triage and repair the E2E failure with Claude Code
         id: triage
-        if: steps.claude_config.outcome == 'success'
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ github.token }}
-          prompt: ${{ steps.claude_config.outputs.prompt }}
-          claude_args: ${{ steps.claude_config.outputs.claude_args }}
+        if: steps.claude_install.outcome == 'success'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PYTHONPATH: automation
+        run: >-
+          python3 -m self_healing.claude_cli
+          --result triage-result.json
+          --metadata claude-run.json
 
       - name: Store Claude triage result
         if: steps.triage.outcome == 'success'
-        env:
-          TRIAGE_OUTPUT: ${{ steps.triage.outputs.structured_output }}
         shell: bash
         run: |
-          printf '%s\n' "$TRIAGE_OUTPUT" > triage-result.json
           classification="$(jq -r '.classification' triage-result.json)"
           confidence="$(jq -r '.confidence' triage-result.json)"
           fix_applied="$(jq -r '.fix_applied' triage-result.json)"
@@ -125,6 +124,7 @@ jobs:
           name: claude-triage-${{ github.run_attempt }}
           path: |
             triage-result.json
+            claude-run.json
             repair.patch
           if-no-files-found: warn
           retention-days: 14

@@ -6,6 +6,8 @@ The current demonstration keeps classification and editing in one bounded Claude
 
 A separate deterministic job checks `TEST_DEFECT`, confidence of at least 0.90, repository ownership, exact changed-file agreement, allowed paths, TypeScript, and the smoke suite before committing. Its short-lived write token is not present while candidate commands execute. On PR failures it pushes only to the existing same-repository PR branch; on trusted `main` failures it opens a draft repair PR. The original run remains red and the repair commit starts a fresh CI run.
 
+Claude Code runs through a pinned headless CLI invocation rather than the GitHub action wrapper. This supports the required failed-`main` push event while preserving structured JSON output, a 35-turn limit, a USD 2 budget, unrestricted tools inside the disposable runner, and the same read-only GitHub permission boundary.
+
 For a hardened production design, put the publisher behind a protected GitHub environment and require human approval before its write token is issued.
 
 ```mermaid
