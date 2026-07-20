@@ -26,7 +26,8 @@ Evidence is missing, contradictory, intermittent, or insufficient to distinguish
 4. Inspect the corresponding product source checkout under `.triage-sources`.
 5. Re-run only the failed scenario first.
 6. Use Playwright CLI to inspect the application through the same test setup when possible.
-7. Do not mutate test or product sources during triage.
+7. Do not mutate product sources. A test repair is permitted only after the evidence proves `TEST_DEFECT` in this repository with confidence of at least 0.90.
+8. A repair must preserve the intended behavior and pass both a focused rerun and the smoke suite.
 
 ## Output fields
 
@@ -36,3 +37,8 @@ Evidence is missing, contradictory, intermittent, or insufficient to distinguish
 - `evidence`: concrete observations with paths, commands, or browser/API outcomes.
 - `reproduction`: whether and how the failure was reproduced.
 - `recommended_action`: the smallest safe next action and likely owner.
+- `affected_repository`: the repository most likely to contain the cause or `unknown`.
+- `proposed_change`: the smallest safe change indicated by the evidence, whether applied automatically or left for review.
+- `fix_applied`: whether Claude changed this repository after satisfying the repair gate.
+- `changed_files`: files changed by the repair, otherwise an empty list.
+- `verification`: focused and regression commands run after the repair, otherwise an empty list.

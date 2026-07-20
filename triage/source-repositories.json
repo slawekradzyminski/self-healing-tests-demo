@@ -13,7 +13,22 @@
     {
       "slug": "slawekradzyminski/test-secure-backend",
       "directory": "test-secure-backend",
-      "role": "Authentication and commerce APIs"
+      "role": "Authentication, commerce, messaging, and AI-facing APIs"
+    },
+    {
+      "slug": "slawekradzyminski/ai-learning-lab",
+      "directory": "ai-learning-lab",
+      "role": "Interactive AI courses and browser labs mounted under /learn/"
+    },
+    {
+      "slug": "slawekradzyminski/jms-email-consumer",
+      "directory": "jms-email-consumer",
+      "role": "Artemis email-event consumption and SMTP delivery"
+    },
+    {
+      "slug": "slawekradzyminski/ollama-mock",
+      "directory": "ollama-mock",
+      "role": "Deterministic Ollama-compatible model API used by the stack"
     },
     {
       "slug": "AI-Testers-pl/playwright-multiagent-demo",

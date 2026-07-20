@@ -1,8 +1,8 @@
 # Self-Healing Tests Demo
 
-This repository is a small, deliberately conservative demonstration of AI-assisted E2E failure triage.
+This repository is a small, deliberately constrained demonstration of AI-assisted E2E failure triage and repair.
 
-The initial version does not modify tests. It establishes a trustworthy baseline:
+The workflow establishes a trustworthy baseline and a narrow repair gate:
 
 1. The repository contains the Playwright suite from `playwright-multiagent-demo/wynik`.
 2. CI runs a deterministic public-auth smoke profile derived from that suite against the Awesome Testing training application.
@@ -10,7 +10,8 @@ The initial version does not modify tests. It establishes a trustworthy baseline
 4. Claude Code runs only when the E2E test step fails.
 5. Product and reference-test repositories are cloned only on that failure path.
 6. Claude investigates the failure with repository context and Playwright CLI, then returns structured triage.
-7. The workflow keeps the original E2E result red.
+7. Only a test defect in this repository with at least 0.90 confidence may receive a minimal repair; every other classification remains read-only.
+8. The original run stays red, while a Claude commit to an open PR triggers a fresh verification run.
 
 ## Current target
 
@@ -57,14 +58,21 @@ flowchart LR
     Evidence["Failure: retain evidence"]
     Sources["Clone declared source repositories"]
     Claude["Claude Code + Playwright CLI"]
-    Result["Structured diagnosis"]
+    Gate{"High-confidence test defect?"}
+    Repair["Minimal test repair on PR branch"]
+    Result["Structured result"]
     Red["Preserve failed CI result"]
+    Verify["New commit starts a fresh E2E run"]
 
     E2E -->|green| Pass
     E2E -->|red| Evidence
     Evidence --> Sources
     Sources --> Claude
-    Claude --> Result
+    Claude --> Gate
+    Gate -->|no| Result
+    Gate -->|yes| Repair
+    Repair --> Result
+    Repair --> Verify
     Result --> Red
 ```
 
@@ -88,6 +96,8 @@ APP_BASE_URL
 
 For security, Claude triage is skipped for pull requests originating from forks because GitHub does not expose repository secrets to those runs.
 
-## Roadmap
+## Repair boundary
 
-The next iterations can introduce controlled examples for each classification and, only after the diagnosis is reliable, an optional repair branch for high-confidence `TEST_DEFECT` results. Repairs should always be reviewed and must prove that the original business assertion remains intact.
+Automated changes are limited to high-confidence `TEST_DEFECT` results in this repository. Repairs must preserve the original business assertion and prove the change with a focused rerun plus the smoke suite. Product bugs, infrastructure failures, and uncertain results are reported without edits.
+
+The proposed permission boundary, validation gates, cross-repository token model, and effort estimates are in [`docs/repair-pull-requests.md`](docs/repair-pull-requests.md).
