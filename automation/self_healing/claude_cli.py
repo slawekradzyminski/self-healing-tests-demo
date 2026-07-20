@@ -31,7 +31,8 @@ SECRET_VALUE = re.compile(r"\b(?:sk-ant-|gh[oprsu]_)[A-Za-z0-9_-]+\b")
 
 
 def sanitize_text(value: object, limit: int = 700) -> str:
-    text = str(value).replace("\x00", "")
+    text = str(value).replace("\x00", "").replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\n", " ; ")
     text = SECRET_ASSIGNMENT.sub(lambda match: f"{match.group(1)}=[REDACTED]", text)
     text = SECRET_VALUE.sub("[REDACTED]", text)
     text = re.sub(r"\s+", " ", text).strip()

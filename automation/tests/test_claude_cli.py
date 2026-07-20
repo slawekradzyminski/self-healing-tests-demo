@@ -4,6 +4,7 @@ import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -97,7 +98,8 @@ class ClaudeCliTest(unittest.TestCase):
             "self_healing.claude_cli.subprocess.Popen", return_value=process
         ):
             progress_path = Path(directory) / "progress.jsonl"
-            returncode, result = run_stream(["claude"], progress_path)
+            with redirect_stdout(io.StringIO()):
+                returncode, result = run_stream(["claude"], progress_path)
             progress = progress_path.read_text(encoding="utf-8")
 
         self.assertEqual(returncode, 0)
