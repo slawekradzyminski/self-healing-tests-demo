@@ -17,7 +17,7 @@ export class LoginPage extends BasePage {
   constructor(page: Page) {
     super(page, '/login');
     this.toast = new ToastAlert(page);
-    this.loginPage = this.byTestId('login-page');
+    this.loginPage = this.byTestId('login-panel');
     this.usernameInput = this.byTestId('login-username-input');
     this.passwordInput = this.byTestId('login-password-input');
     this.submitButton = this.byTestId('login-submit-button');
