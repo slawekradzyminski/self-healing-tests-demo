@@ -11,7 +11,7 @@ The workflow establishes a trustworthy baseline and a narrow repair gate:
 5. Product and reference-test repositories are cloned only on that failure path.
 6. Claude investigates the failure with repository context and Playwright CLI, then returns structured triage.
 7. Only a test defect in this repository with at least 0.90 confidence may receive a minimal repair; every other classification remains read-only.
-8. The original run stays red, while a Claude commit to an open PR triggers a fresh verification run.
+8. A deterministic publisher independently validates Claude's diff, commits it to the open PR branch, and triggers a fresh run; the original failed run stays red.
 
 ## Current target
 
@@ -98,6 +98,6 @@ For security, Claude triage is skipped for pull requests originating from forks 
 
 ## Repair boundary
 
-Automated changes are limited to high-confidence `TEST_DEFECT` results in this repository. Repairs must preserve the original business assertion and prove the change with a focused rerun plus the smoke suite. Product bugs, infrastructure failures, and uncertain results are reported without edits.
+Automated changes are limited to high-confidence `TEST_DEFECT` results in this repository. Repairs must preserve the original business assertion and prove the change with a focused rerun plus the smoke suite. A separate publisher checks the classification, confidence, affected repository, reported file list, allowed paths, TypeScript, and smoke suite before it can push. Product bugs, infrastructure failures, and uncertain results are reported without edits.
 
 The proposed permission boundary, validation gates, cross-repository token model, and effort estimates are in [`docs/repair-pull-requests.md`](docs/repair-pull-requests.md).
