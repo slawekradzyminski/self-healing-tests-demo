@@ -107,6 +107,8 @@ Claude runs with automatic approval and unrestricted local tools, but its job ha
 
 The workflow invokes the pinned Claude Code CLI directly in non-interactive mode so failure triage works for both `push` and `pull_request` events. It caps each run at 35 agentic turns and USD 2, and stores turn, duration, usage, and cost metadata with the structured diagnosis. The official GitHub action is intentionally not the execution wrapper here because its current runtime rejects a `push` event before Claude starts.
 
+During triage, Actions displays a sanitized live timeline of Claude's phase notes, tool calls, commands or file paths, and tool completion status. Hidden thinking blocks, tool output bodies, secrets, and token-like values are not logged. The job summary and draft PR explain the classification, confidence, evidence, reproduction, proposed change, changed files, verification, recommended action, turns, duration, cost, and permission denials. The same sanitized timeline is retained as `claude-progress.jsonl` in the triage artifact.
+
 GitHub does not offer a create-PR-but-never-merge permission: both operations use `pull-requests: write`. The write token is therefore exposed only to the deterministic delivery module, never to Claude or candidate test commands. Protect `main` with repository rules that require pull requests and human review.
 
 Prompt construction, the structured-output schema, repair policy, artifact bundling, and publishing logic live in the dependency-free [`automation`](automation/) Python project. Run its tests with:

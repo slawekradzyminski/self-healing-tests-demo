@@ -21,6 +21,8 @@ class ConfigTest(unittest.TestCase):
         self.assertIn("classification", load_schema()["required"])
 
         arguments = claude_arguments()
+        self.assertEqual(arguments[arguments.index("--output-format") + 1], "stream-json")
+        self.assertIn("--verbose", arguments)
         self.assertEqual(arguments[arguments.index("--max-turns") + 1], "35")
         self.assertEqual(arguments[arguments.index("--max-budget-usd") + 1], "2.0")
         self.assertEqual(arguments[arguments.index("--permission-mode") + 1], "bypassPermissions")

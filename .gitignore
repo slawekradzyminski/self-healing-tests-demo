@@ -20,6 +20,7 @@ artifacts
 .triage-sources/
 triage-result.json
 claude-run.json
+claude-progress.jsonl
 test-output.log
 repair.patch
 

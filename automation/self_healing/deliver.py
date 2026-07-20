@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
 from pathlib import Path
+
+from self_healing.report import render_triage_markdown
 
 
 SAFE_BRANCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
@@ -34,6 +37,9 @@ def deliver(
     repo_dir: Path,
     head_branch: str | None,
     run_id: str,
+    result_path: Path,
+    metadata_path: Path,
+    server_url: str,
 ) -> None:
     if "GH_TOKEN" not in os.environ:
         raise ValueError("GH_TOKEN is required only for the delivery step")
@@ -46,6 +52,15 @@ def deliver(
         return
 
     branch = validate_branch(repair_branch(run_id))
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    body = render_triage_markdown(result, metadata, repository, run_id, server_url)
+    body += (
+        "\n### Safety boundary\n\n"
+        "Claude had unrestricted tools only inside an ephemeral, read-only runner. "
+        "A separate deterministic job validated this patch before creating the draft PR. "
+        "No workflow path can merge it.\n"
+    )
     run("git", "push", "origin", f"HEAD:refs/heads/{branch}", cwd=repo_dir)
     run(
         "gh",
@@ -61,7 +76,7 @@ def deliver(
         "--title",
         "Fix E2E test defect diagnosed by Claude",
         "--body",
-        "Automated draft repair. Review the linked failing run, triage artifact, and verification before merging.",
+        body,
         cwd=repo_dir,
     )
 
@@ -73,6 +88,9 @@ def main() -> None:
     parser.add_argument("--repo-dir", type=Path, required=True)
     parser.add_argument("--head-branch")
     parser.add_argument("--run-id", required=True)
+    parser.add_argument("--result", type=Path, required=True)
+    parser.add_argument("--metadata", type=Path, required=True)
+    parser.add_argument("--server-url", required=True)
     args = parser.parse_args()
     deliver(
         args.event,
@@ -80,6 +98,9 @@ def main() -> None:
         args.repo_dir.resolve(),
         args.head_branch,
         args.run_id,
+        args.result.resolve(),
+        args.metadata.resolve(),
+        args.server_url,
     )
 
 

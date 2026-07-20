@@ -8,6 +8,8 @@ A separate deterministic job checks `TEST_DEFECT`, confidence of at least 0.90, 
 
 Claude Code runs through a pinned headless CLI invocation rather than the GitHub action wrapper. This supports the required failed-`main` push event while preserving structured JSON output, a 35-turn limit, a USD 2 budget, unrestricted tools inside the disposable runner, and the same read-only GitHub permission boundary.
 
+The CLI uses verbose `stream-json` output so the workflow does not appear idle while Claude investigates. A dependency-free observer prints and stores only a sanitized activity trace: concise assistant progress notes, tool names, safe command or file summaries, completion state, elapsed time, and the final result. It explicitly drops thinking/signature blocks and tool-result bodies. The structured diagnosis is rendered into both the GitHub job summary and draft PR body, including evidence, reproduction, proposed changes, verification, turns, duration, cost, and permission denials.
+
 For a hardened production design, put the publisher behind a protected GitHub environment and require human approval before its write token is issued.
 
 ```mermaid

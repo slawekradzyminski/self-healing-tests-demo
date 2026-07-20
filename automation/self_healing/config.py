@@ -26,7 +26,8 @@ def claude_arguments() -> tuple[str, ...]:
     return (
         "-p",
         "--output-format",
-        "json",
+        "stream-json",
+        "--verbose",
         "--max-turns",
         str(MAX_TURNS),
         "--max-budget-usd",

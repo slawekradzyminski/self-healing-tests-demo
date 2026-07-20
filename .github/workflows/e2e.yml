@@ -95,15 +95,20 @@ jobs:
           python3 -m self_healing.claude_cli
           --result triage-result.json
           --metadata claude-run.json
+          --progress claude-progress.jsonl
 
-      - name: Store Claude triage result
-        if: steps.triage.outcome == 'success'
-        shell: bash
-        run: |
-          classification="$(jq -r '.classification' triage-result.json)"
-          confidence="$(jq -r '.confidence' triage-result.json)"
-          fix_applied="$(jq -r '.fix_applied' triage-result.json)"
-          printf 'Claude triage: %s (confidence %s; fix applied: %s)\n' "$classification" "$confidence" "$fix_applied" >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish Claude diagnosis summary
+        if: always() && steps.claude_install.outcome == 'success'
+        env:
+          PYTHONPATH: automation
+        run: >-
+          python3 -m self_healing.report
+          --result triage-result.json
+          --metadata claude-run.json
+          --github-summary "$GITHUB_STEP_SUMMARY"
+          --repository "${{ github.repository }}"
+          --run-id "${{ github.run_id }}"
+          --server-url "${{ github.server_url }}"
 
       - name: Bundle repair candidate
         id: bundle
@@ -125,6 +130,7 @@ jobs:
           path: |
             triage-result.json
             claude-run.json
+            claude-progress.jsonl
             repair.patch
           if-no-files-found: warn
           retention-days: 14
@@ -209,3 +215,6 @@ jobs:
           --repo-dir candidate
           --head-branch "$HEAD_BRANCH"
           --run-id "${{ github.run_id }}"
+          --result repair-output/triage-result.json
+          --metadata repair-output/claude-run.json
+          --server-url "${{ github.server_url }}"
