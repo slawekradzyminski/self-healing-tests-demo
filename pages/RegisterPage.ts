@@ -52,7 +52,12 @@ export class RegisterPage extends BasePage {
   }
 
   async submit() {
-    await this.submitButton.click();
+    await Promise.all([
+      this.page.waitForResponse(response => response.url().endsWith('/api/v1/users/register'), {
+        timeout: 5_000,
+      }),
+      this.submitButton.click(),
+    ]);
   }
 
   async clickLoginButton() {
