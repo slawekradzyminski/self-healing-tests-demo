@@ -118,7 +118,7 @@ jobs:
           --github-output "$GITHUB_OUTPUT"
 
       - name: Upload Claude triage and repair candidate
-        if: steps.triage.outcome == 'success'
+        if: always() && steps.claude_install.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
           name: claude-triage-${{ github.run_attempt }}

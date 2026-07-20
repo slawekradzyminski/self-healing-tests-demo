@@ -20,6 +20,7 @@ METADATA_FIELDS = (
     "usage",
     "modelUsage",
     "permission_denials",
+    "errors",
 )
 
 
@@ -44,6 +45,17 @@ def select_metadata(payload: dict[str, Any]) -> dict[str, Any]:
     return {name: payload[name] for name in METADATA_FIELDS if name in payload}
 
 
+def describe_run(returncode: int, metadata: dict[str, Any]) -> str:
+    return (
+        "Claude Code process: "
+        f"exit={returncode} "
+        f"subtype={metadata.get('subtype', 'unknown')} "
+        f"is_error={metadata.get('is_error', 'unknown')} "
+        f"turns={metadata.get('num_turns', 'unknown')} "
+        f"cost_usd={metadata.get('total_cost_usd', 'unknown')}"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--result", type=Path, required=True)
@@ -57,20 +69,19 @@ def main() -> None:
         stdout=subprocess.PIPE,
         text=True,
     )
+    if not completed.stdout.strip():
+        raise RuntimeError(f"Claude Code exited with status {completed.returncode} and no JSON output")
+
+    payload = json.loads(completed.stdout)
+    metadata = select_metadata(payload)
+    args.metadata.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    print(describe_run(completed.returncode, metadata), flush=True)
+
     if completed.returncode != 0:
         raise RuntimeError(f"Claude Code exited with status {completed.returncode}")
 
-    payload = json.loads(completed.stdout)
     structured = extract_structured_output(payload)
-    metadata = select_metadata(payload)
-
     args.result.write_text(json.dumps(structured, indent=2) + "\n", encoding="utf-8")
-    args.metadata.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-    print(
-        "Claude Code completed: "
-        f"turns={metadata.get('num_turns', 'unknown')} "
-        f"cost_usd={metadata.get('total_cost_usd', 'unknown')}"
-    )
 
 
 if __name__ == "__main__":
