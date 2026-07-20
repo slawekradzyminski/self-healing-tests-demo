@@ -11,7 +11,8 @@ The workflow establishes a trustworthy baseline and a narrow repair gate:
 5. Product and reference-test repositories are cloned only on that failure path.
 6. Claude investigates the failure with repository context and Playwright CLI, then returns structured triage.
 7. Only a test defect in this repository with at least 0.90 confidence may receive a minimal repair; every other classification remains read-only.
-8. A deterministic publisher independently validates Claude's diff, commits it to the open PR branch, and triggers a fresh run; the original failed run stays red.
+8. Claude has unrestricted tools only inside an ephemeral runner with a read-only GitHub token.
+9. A separate deterministic publisher independently validates Claude's patch, commits it to the existing PR branch, and triggers a fresh run; the original failed run stays red.
 
 ## Current target
 
@@ -57,9 +58,10 @@ flowchart LR
     Pass["Pass: finish without Claude"]
     Evidence["Failure: retain evidence"]
     Sources["Clone declared source repositories"]
-    Claude["Claude Code + Playwright CLI"]
+    Claude["Sandboxed Claude Code + Playwright CLI"]
     Gate{"High-confidence test defect?"}
-    Repair["Minimal test repair on PR branch"]
+    Patch["Repair patch artifact"]
+    Publisher["Deterministic publisher with contents: write"]
     Result["Structured result"]
     Red["Preserve failed CI result"]
     Verify["New commit starts a fresh E2E run"]
@@ -70,9 +72,10 @@ flowchart LR
     Sources --> Claude
     Claude --> Gate
     Gate -->|no| Result
-    Gate -->|yes| Repair
-    Repair --> Result
-    Repair --> Verify
+    Gate -->|yes| Patch
+    Patch --> Publisher
+    Publisher --> Verify
+    Patch --> Result
     Result --> Red
 ```
 
@@ -98,6 +101,16 @@ For security, Claude triage is skipped for pull requests originating from forks 
 
 ## Repair boundary
 
-Automated changes are limited to high-confidence `TEST_DEFECT` results in this repository. Repairs must preserve the original business assertion and prove the change with a focused rerun plus the smoke suite. A separate publisher checks the classification, confidence, affected repository, reported file list, allowed paths, TypeScript, and smoke suite before it can push. Product bugs, infrastructure failures, and uncertain results are reported without edits.
+Automated changes are limited to high-confidence `TEST_DEFECT` results in this repository. Repairs must preserve the original business assertion and prove the change with a focused rerun plus the smoke suite.
+
+Claude runs with automatic approval and unrestricted local tools, but its job has only `contents: read`. A separate job receives the patch artifact and checks the classification, confidence, affected repository, reported file list, allowed paths, TypeScript, and smoke suite before it can push. On a PR failure it pushes only to that same-repository PR branch; on a trusted `main` failure it opens a new draft repair PR. No code path invokes merge.
+
+GitHub does not offer a create-PR-but-never-merge permission: both operations use `pull-requests: write`. The write token is therefore exposed only to the deterministic delivery module, never to Claude or candidate test commands. Protect `main` with repository rules that require pull requests and human review.
+
+Prompt construction, the structured-output schema, repair policy, artifact bundling, and publishing logic live in the dependency-free [`automation`](automation/) Python project. Run its tests with:
+
+```bash
+PYTHONPATH=automation python3 -m unittest discover -s automation/tests -v
+```
 
 The proposed permission boundary, validation gates, cross-repository token model, and effort estimates are in [`docs/repair-pull-requests.md`](docs/repair-pull-requests.md).

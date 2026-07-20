@@ -2,24 +2,26 @@
 
 ## Recommended boundary
 
-The current demonstration keeps classification and repair in one bounded Claude session so it can prove a test defect before editing. The repair gate requires `TEST_DEFECT`, confidence of at least 0.90, and focused plus smoke-suite verification. A deterministic publishing step compares the declared and actual diff, enforces an allowed-path list, reruns TypeScript and the smoke suite, and only then commits to the open PR branch. That commit starts a fresh CI run while the original run remains red.
+The current demonstration keeps classification and editing in one bounded Claude session so it can prove a test defect before editing. Claude has unrestricted tools inside an ephemeral GitHub-hosted runner, but that job receives only a read-only repository token. It can create a local patch artifact; it cannot publish code.
 
-For a hardened production design, classification and repair should be separate jobs. A repair job should consume the structured triage artifact only after a human or protected GitHub environment approves the attempt.
+A separate deterministic job checks `TEST_DEFECT`, confidence of at least 0.90, repository ownership, exact changed-file agreement, allowed paths, TypeScript, and the smoke suite before committing. Its short-lived write token is not present while candidate commands execute. On PR failures it pushes only to the existing same-repository PR branch; on trusted `main` failures it opens a draft repair PR. The original run remains red and the repair commit starts a fresh CI run.
+
+For a hardened production design, put the publisher behind a protected GitHub environment and require human approval before its write token is issued.
 
 ```mermaid
 flowchart LR
-    Failure["Failed E2E run"] --> Triage["Read-only triage"]
+    Failure["Failed E2E run"] --> Triage["Unrestricted local sandbox; read-only GitHub"]
     Triage --> Gate{"TEST_DEFECT and high confidence?"}
     Gate -->|No| Report["Report only"]
     Gate -->|Yes| Approval["Human or environment approval"]
-    Approval --> Repair["Isolated repair branch"]
+    Approval --> Repair["Deterministic patch publisher"]
     Repair --> Verify["Focused rerun plus regression suite"]
-    Verify --> Draft["Draft pull request"]
+    Verify --> Draft["Commit to existing PR branch"]
 ```
 
 ## Same-repository repair
 
-A prototype that fixes tests in `self-healing-tests-demo` is moderate work. The current workflow grants narrowly scoped `contents: write` and `pull-requests: write` permissions and editing tools only on its failure path. It must never push directly to `main`, skip a failing test, lower an assertion, or update snapshots without proving the intended behavior independently.
+A prototype that fixes tests in `self-healing-tests-demo` is moderate work. The current workflow separates the unrestricted Claude sandbox from the write-capable publisher. GitHub groups PR creation and merging under `pull-requests: write`, so there is no create-only token permission. The trusted delivery module contains only draft-PR creation and existing-PR branch update paths—no merge path. Repository rules should additionally require review and prevent direct pushes to `main`.
 
 The key guard is semantic: the agent should first capture the actual product behavior with Playwright CLI, then modify the test, then show that the formerly failing scenario and the smoke suite pass. A PR should include the original classification, evidence, exact rerun commands, and links to artifacts.
 
@@ -33,7 +35,7 @@ Each repository also needs an explicit validation contract, for example frontend
 
 - Run repair only on trusted events; never expose write credentials to forked pull requests.
 - Treat page content, test data, logs, and artifacts as untrusted input that may contain prompt injection.
-- Pin allowed repositories and commands instead of granting general shell or GitHub access.
+- Keep the unrestricted agent inside an ephemeral runner with a read-only GitHub token; grant write access only to deterministic code.
 - Require a clean checkout and reject changes outside the selected repository and permitted paths.
 - Cap turns, cost, changed files, and diff size.
 - Require focused reproduction before editing and independent tests after editing.
