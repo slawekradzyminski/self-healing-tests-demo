@@ -7,18 +7,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-
 jobs:
   e2e:
-    name: Playwright E2E
+    name: Playwright E2E and sandboxed Claude repair
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     env:
       APP_BASE_URL: ${{ vars.APP_BASE_URL || 'https://aitesters.byst.re' }}
+    outputs:
+      repair_ready: ${{ steps.bundle.outputs.repair_ready || 'false' }}
 
     steps:
       - name: Check out tests
@@ -35,6 +34,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Test repair policy
+        env:
+          PYTHONPATH: automation
+        run: python3 -m unittest discover -s automation/tests -v
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
@@ -68,45 +72,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: ./scripts/clone-triage-sources.sh
 
-      - name: Triage the E2E failure with Claude Code
-        id: triage
+      - name: Prepare Claude configuration
+        id: claude_config
         if: >-
           steps.e2e.outcome == 'failure' &&
           (github.event_name != 'pull_request' ||
           github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          PYTHONPATH: automation
+        run: >-
+          python3 -m self_healing.prepare
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Triage and repair the E2E failure with Claude Code
+        id: triage
+        if: steps.claude_config.outcome == 'success'
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
-          prompt: |
-            Diagnose the failed Playwright E2E run in this repository.
-
-            Read CLAUDE.md, docs/product-overview.md,
-            docs/triage-contract.md, triage/source-repositories.json,
-            test-output.log, test-results/results.json, and relevant test artifacts.
-
-            The declared product and reference repositories have already been
-            cloned under .triage-sources. Inspect the relevant source rather
-            than guessing component ownership.
-
-            Re-run only the failed test first. Use the locally installed
-            Playwright CLI (`npx --no-install playwright-cli`) to investigate
-            the live application when reproduction is possible. Keep browser
-            investigation headless and close any CLI sessions when finished.
-
-            If and only if the evidence demonstrates a TEST_DEFECT in this
-            repository with confidence of at least 0.90, apply the smallest
-            safe correction. Preserve the business intent: never skip a test,
-            weaken an assertion, blindly update a snapshot, or change product
-            source. Re-run the failed test and the smoke suite after editing.
-
-            For PRODUCT_BUG, CI_ENVIRONMENT, or INCONCLUSIVE results, do not
-            edit anything. Do not modify workflow or triage-policy files.
-            Return INCONCLUSIVE when evidence cannot support another class.
-          claude_args: >-
-            --max-turns 100
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(gh:*),Bash(git:*),Bash(ls:*),Bash(find:*)"
-            --json-schema '{"type":"object","additionalProperties":false,"properties":{"classification":{"type":"string","enum":["PRODUCT_BUG","TEST_DEFECT","CI_ENVIRONMENT","INCONCLUSIVE"]},"confidence":{"type":"number","minimum":0,"maximum":1},"summary":{"type":"string"},"evidence":{"type":"array","items":{"type":"string"},"minItems":1},"reproduction":{"type":"string"},"recommended_action":{"type":"string"},"affected_repository":{"type":"string"},"proposed_change":{"type":"string"},"fix_applied":{"type":"boolean"},"changed_files":{"type":"array","items":{"type":"string"}},"verification":{"type":"array","items":{"type":"string"}}},"required":["classification","confidence","summary","evidence","reproduction","recommended_action","affected_repository","proposed_change","fix_applied","changed_files","verification"]}'
+          prompt: ${{ steps.claude_config.outputs.prompt }}
+          claude_args: ${{ steps.claude_config.outputs.claude_args }}
 
       - name: Store Claude triage result
         if: steps.triage.outcome == 'success'
@@ -120,64 +106,106 @@ jobs:
           fix_applied="$(jq -r '.fix_applied' triage-result.json)"
           printf 'Claude triage: %s (confidence %s; fix applied: %s)\n' "$classification" "$confidence" "$fix_applied" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish verified test repair to the PR branch
-        if: >-
-          steps.triage.outcome == 'success' &&
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
+      - name: Bundle repair candidate
+        id: bundle
+        if: steps.triage.outcome == 'success'
         env:
-          TRIAGE_OUTPUT: ${{ steps.triage.outputs.structured_output }}
-          HEAD_BRANCH: ${{ github.head_ref }}
-        shell: bash
-        run: |
-          set -Eeuo pipefail
+          PYTHONPATH: automation
+        run: >-
+          python3 -m self_healing.bundle
+          --result triage-result.json
+          --patch repair.patch
+          --repository "${{ github.repository }}"
+          --github-output "$GITHUB_OUTPUT"
 
-          should_publish="$(jq -r '
-            .classification == "TEST_DEFECT" and
-            .confidence >= 0.90 and
-            .fix_applied == true and
-            .affected_repository == "${{ github.repository }}"
-          ' <<< "$TRIAGE_OUTPUT")"
-
-          if [[ "$should_publish" != "true" ]]; then
-            echo "Claude result did not satisfy the repair gate."
-            exit 0
-          fi
-
-          git diff --check
-          git diff --name-only | sort -u > /tmp/actual-changed-files
-          jq -r '.changed_files[]' <<< "$TRIAGE_OUTPUT" | sort -u > /tmp/reported-changed-files
-          diff -u /tmp/reported-changed-files /tmp/actual-changed-files
-          test -s /tmp/actual-changed-files
-
-          while IFS= read -r changed_file; do
-            case "$changed_file" in
-              tests/*.ts|pages/*.ts|fixtures/*.ts|components/*.ts|config/*.ts)
-                ;;
-              *)
-                echo "Repair touched a disallowed path: $changed_file" >&2
-                exit 1
-                ;;
-            esac
-          done < /tmp/actual-changed-files
-
-          npm run typecheck
-          npm run test:e2e
-
-          git config user.name "claude[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add --pathspec-from-file=/tmp/actual-changed-files
-          git commit -m "Fix E2E test defect diagnosed by Claude"
-          git push origin "HEAD:$HEAD_BRANCH"
-
-      - name: Upload Claude triage
+      - name: Upload Claude triage and repair candidate
         if: steps.triage.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
           name: claude-triage-${{ github.run_attempt }}
-          path: triage-result.json
+          path: |
+            triage-result.json
+            repair.patch
+          if-no-files-found: warn
           retention-days: 14
 
       - name: Preserve the E2E failure
         if: steps.e2e.outcome == 'failure'
         run: exit 1
+
+  publish-repair:
+    name: Validate and publish Claude repair
+    needs: e2e
+    if: >-
+      always() &&
+      needs.e2e.outputs.repair_ready == 'true' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    env:
+      APP_BASE_URL: ${{ vars.APP_BASE_URL || 'https://aitesters.byst.re' }}
+
+    steps:
+      - name: Check out trusted repair policy
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.sha }}
+          path: policy
+          persist-credentials: false
+
+      - name: Check out PR candidate
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: candidate/package-lock.json
+
+      - name: Install candidate dependencies
+        working-directory: candidate
+        run: npm ci
+
+      - name: Install candidate Chromium
+        working-directory: candidate
+        run: npx playwright install --with-deps chromium
+
+      - name: Download repair candidate
+        uses: actions/download-artifact@v8
+        with:
+          name: claude-triage-${{ github.run_attempt }}
+          path: repair-output
+
+      - name: Validate and commit repair
+        env:
+          PYTHONPATH: policy/automation
+        run: >-
+          python3 -m self_healing.publish
+          --result repair-output/triage-result.json
+          --patch repair-output/repair.patch
+          --repository "${{ github.repository }}"
+          --repo-dir candidate
+
+      - name: Deliver only through a PR branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+          PYTHONPATH: policy/automation
+        run: >-
+          python3 -m self_healing.deliver
+          --event "${{ github.event_name }}"
+          --repository "${{ github.repository }}"
+          --repo-dir candidate
+          --head-branch "$HEAD_BRANCH"
+          --run-id "${{ github.run_id }}"
