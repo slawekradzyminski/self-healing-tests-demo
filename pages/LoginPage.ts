@@ -38,16 +38,10 @@ export class LoginPage extends BasePage {
   async login(credentials: LoginDto) {
     await this.usernameInput.fill(credentials.username);
     await this.passwordInput.fill(credentials.password);
-    await Promise.all([
-      this.page.waitForResponse(response => response.url().endsWith('/api/v1/users/login'), {
-        timeout: 5_000,
-      }),
-      this.submitButton.click(),
-    ]);
+    await this.submitButton.click();
   }
 
   async clickRegisterButton() {
-    await this.page.waitForURL('**/register', { timeout: 5_000 });
     await this.registerButton.click();
   }
 
