@@ -19,3 +19,7 @@ artifacts
 .env
 .triage-sources/
 triage-result.json
+
+# Python
+__pycache__/
+*.py[cod]
