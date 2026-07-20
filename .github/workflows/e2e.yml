@@ -1,0 +1,122 @@
+name: E2E with Claude failure triage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out tests
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        id: e2e
+        continue-on-error: true
+        env:
+          APP_BASE_URL: ${{ vars.APP_BASE_URL || 'https://aitesters.byst.re' }}
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test:e2e 2>&1 | tee test-output.log
+
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-evidence-${{ github.run_attempt }}
+          path: |
+            test-output.log
+            test-results/
+            playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Clone diagnostic source repositories
+        if: >-
+          steps.e2e.outcome == 'failure' &&
+          (github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/clone-triage-sources.sh
+
+      - name: Triage the E2E failure with Claude Code
+        id: triage
+        if: >-
+          steps.e2e.outcome == 'failure' &&
+          (github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository)
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          prompt: |
+            Diagnose the failed Playwright E2E run in this repository.
+
+            Read CLAUDE.md, docs/product-overview.md,
+            docs/triage-contract.md, triage/source-repositories.json,
+            test-output.log, test-results/results.json, and relevant test artifacts.
+
+            The declared product and reference repositories have already been
+            cloned under .triage-sources. Inspect the relevant source rather
+            than guessing component ownership.
+
+            Re-run only the failed test first. Use the locally installed
+            Playwright CLI (`npx --no-install playwright-cli`) to investigate
+            the live application when reproduction is possible. Keep browser
+            investigation headless and close any CLI sessions when finished.
+
+            This phase is diagnosis-only. Do not edit files, commit, push,
+            skip tests, or weaken assertions. Preserve the original failure.
+            Return INCONCLUSIVE when evidence cannot support another class.
+          claude_args: >-
+            --max-turns 20
+            --allowedTools "Read,Glob,Grep,Bash(npm:*),Bash(npx:*),Bash(gh:*),Bash(git:*),Bash(ls:*),Bash(find:*)"
+            --disallowedTools "Edit,Write"
+            --json-schema '{"type":"object","additionalProperties":false,"properties":{"classification":{"type":"string","enum":["PRODUCT_BUG","TEST_DEFECT","CI_ENVIRONMENT","INCONCLUSIVE"]},"confidence":{"type":"number","minimum":0,"maximum":1},"summary":{"type":"string"},"evidence":{"type":"array","items":{"type":"string"},"minItems":1},"reproduction":{"type":"string"},"recommended_action":{"type":"string"}},"required":["classification","confidence","summary","evidence","reproduction","recommended_action"]}'
+
+      - name: Store Claude triage result
+        if: steps.triage.outcome == 'success'
+        env:
+          TRIAGE_OUTPUT: ${{ steps.triage.outputs.structured_output }}
+        shell: bash
+        run: |
+          printf '%s\n' "$TRIAGE_OUTPUT" > triage-result.json
+          classification="$(jq -r '.classification' triage-result.json)"
+          confidence="$(jq -r '.confidence' triage-result.json)"
+          printf 'Claude triage: %s (confidence %s)\n' "$classification" "$confidence" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Claude triage
+        if: steps.triage.outcome == 'success'
+        uses: actions/upload-artifact@v5
+        with:
+          name: claude-triage-${{ github.run_attempt }}
+          path: triage-result.json
+          retention-days: 14
+
+      - name: Preserve the E2E failure
+        if: steps.e2e.outcome == 'failure'
+        run: exit 1

@@ -1,0 +1,24 @@
+{
+  "repositories": [
+    {
+      "slug": "slawekradzyminski/awesome-localstack",
+      "directory": "awesome-localstack",
+      "role": "Deployment profiles, gateway routing, and runtime compatibility"
+    },
+    {
+      "slug": "slawekradzyminski/vite-react-frontend",
+      "directory": "vite-react-frontend",
+      "role": "Browser UI, client-side validation, and frontend routing"
+    },
+    {
+      "slug": "slawekradzyminski/test-secure-backend",
+      "directory": "test-secure-backend",
+      "role": "Authentication and commerce APIs"
+    },
+    {
+      "slug": "AI-Testers-pl/playwright-multiagent-demo",
+      "directory": "playwright-multiagent-demo",
+      "role": "Reference Playwright suite used as the test-design source"
+    }
+  ]
+}
