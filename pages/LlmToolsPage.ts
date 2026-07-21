@@ -63,7 +63,7 @@ export class LlmToolsPage extends LlmModePage {
   }
 
   async verifyCatalogLookupCompleted() {
-    await expect(this.toolCallNotices).toHaveCount(2, { timeout: 60_000 });
+    await expect(this.toolCallNotices).toHaveCount(2, { timeout: 30_000 });
     await expect(this.toolCallNotices).toContainText(['list_products', 'get_product_snapshot']);
     await expect(this.toolMessages).toHaveCount(2);
     await expect(this.toolMessages).toContainText(['list_products', 'get_product_snapshot']);
