@@ -9,6 +9,9 @@ export class LlmToolsPage extends LlmModePage {
   readonly systemPromptContent: Locator;
   readonly chatInput: Locator;
   readonly sendButton: Locator;
+  readonly toolCallNotices: Locator;
+  readonly toolMessages: Locator;
+  readonly assistantMessageContents: Locator;
 
   constructor(page: Page) {
     super(page, '/llm/tools', 'llm-tools-mode', 'Catalog-grounded assistant');
@@ -19,6 +22,9 @@ export class LlmToolsPage extends LlmModePage {
     this.systemPromptContent = this.byTestId('tool-system-prompt-content');
     this.chatInput = this.byTestId('chat-input');
     this.sendButton = this.byTestId('chat-send-button');
+    this.toolCallNotices = this.byTestId('tool-call-notice');
+    this.toolMessages = this.byTestId('tool-message');
+    this.assistantMessageContents = this.byTestId('chat-message-content-assistant');
   }
 
   override async verifyLoaded() {
@@ -49,5 +55,19 @@ export class LlmToolsPage extends LlmModePage {
   async verifyReadyToSend(message: string) {
     await expect(this.chatInput).toHaveValue(message);
     await expect(this.sendButton).toBeEnabled();
+  }
+
+  async sendMessage(message: string) {
+    await this.chatInput.fill(message);
+    await this.sendButton.click();
+  }
+
+  async verifyCatalogLookupCompleted() {
+    await expect(this.toolCallNotices).toHaveCount(2, { timeout: 60_000 });
+    await expect(this.toolCallNotices).toContainText(['list_products', 'get_product_snapshot']);
+    await expect(this.toolMessages).toHaveCount(2);
+    await expect(this.toolMessages).toContainText(['list_products', 'get_product_snapshot']);
+    await expect(this.assistantMessageContents.last()).toContainText('iPhone 13 Pro');
+    await expect(this.chatInput).toBeEnabled();
   }
 }

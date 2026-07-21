@@ -61,6 +61,8 @@ Backend operations publish email work to ActiveMQ Artemis. `jms-email-consumer` 
 
 The AI Learning Lab is a separately built frontend mounted only at `awesome.byst.re/learn/`. It reuses the commerce session by validating it through `/api/v1/users/me`. Guided labs can call backend AI features, which use an Ollama-compatible API. The server deployment points those calls at `ollama-mock`, a deterministic implementation used to avoid the latency and variability of a real model during exercises.
 
+The commerce frontend also exposes authenticated generate, chat, and catalog-tool workflows under `/llm`. In the catalog workflow, the browser sends the conversation and tool schemas to the Spring backend. The backend forwards them to the Ollama-compatible service, executes every requested catalog tool against live backend data, appends each tool result to the conversation, and repeats until the model returns a final answer. The assistant's system contract requires product facts in that final answer to remain consistent with the tool results; a successful stream alone is therefore not sufficient evidence that the workflow is correct.
+
 ## Repository map
 
 These are all runtime and orchestration repositories declared by `awesome-localstack`, plus the test-design reference used by this demo:
