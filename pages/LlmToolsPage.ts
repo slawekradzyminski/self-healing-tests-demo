@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { LlmModePage } from './LlmModePage';
+import type { Product } from '../types/product';
 
 export class LlmToolsPage extends LlmModePage {
   readonly toolsPage: Locator;
@@ -69,5 +70,14 @@ export class LlmToolsPage extends LlmModePage {
     await expect(this.toolMessages).toContainText(['list_products', 'get_product_snapshot']);
     await expect(this.assistantMessageContents.last()).toContainText('iPhone 13 Pro');
     await expect(this.chatInput).toBeEnabled();
+  }
+
+  async readProductSnapshot(): Promise<Product> {
+    const snapshotMessage = this.toolMessages
+      .filter({ hasText: 'Function output · get_product_snapshot' })
+      .getByTestId('tool-message-content');
+
+    await expect(snapshotMessage).toBeVisible();
+    return JSON.parse(await snapshotMessage.innerText()) as Product;
   }
 }

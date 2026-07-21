@@ -27,5 +27,9 @@ test.describe('Catalog-grounded assistant smoke tests', () => {
     // then
     await toolsPage.verifyCatalogLookupCompleted();
     await expect(toolsPage.assistantMessageContents.last()).not.toContainText('only these chat tool prompts are supported');
+    const productSnapshot = await toolsPage.readProductSnapshot();
+    await expect(toolsPage.assistantMessageContents.last()).toContainText(
+      `${productSnapshot.stockQuantity} unit(s) in stock`
+    );
   });
 });
