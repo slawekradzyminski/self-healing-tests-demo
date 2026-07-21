@@ -3,7 +3,7 @@ import { SEEDED_SANDBOX_USER } from '../../config/constants';
 import { LoginClient } from '../../http-clients/LoginClient';
 import { LlmToolsPage } from '../../pages/LlmToolsPage';
 
-const IPHONE_CATALOG_PROMPT = 'Which iPhone models are currently available? Include their product details.';
+const IPHONE_CATALOG_PROMPT = 'What iphones do we have available? Tell me the details about them';
 
 test.describe('Catalog-grounded assistant smoke tests', () => {
   test('should answer an iPhone question through the catalog tools', async ({ page, request }) => {
